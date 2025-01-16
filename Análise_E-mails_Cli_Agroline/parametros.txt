@@ -1,0 +1,12 @@
+LOG: 13/10/2023
+
+Após o "@" não é uma letra.
+Após ".com" ou ".com.br" não tem um espaço em branco.
+Após o ";" está em branco.
+".com" com menos de 3 caracteres
+".br" com menos de 2 caracteres
+Campo completamente vazio
+Campo que contenham apenas caracteres especiais
+Campo que contenham apenas números
+
+LOG: 
