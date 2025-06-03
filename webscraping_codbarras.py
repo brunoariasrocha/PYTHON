@@ -6,6 +6,8 @@ from selenium.webdriver.support import expected_conditions as EC
 import pandas as pd
 import re
 import time
+import os
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 # Produtos a buscar
 produtos = [
@@ -44,54 +46,57 @@ options.add_argument("--window-size=1920x1080")
 # Inicializa o navegador
 driver = uc.Chrome(options=options)
 
-# Loop de busca
-for produto in produtos:
-    print(f"\n🔎 Buscando produtos semelhantes a: {produto}")
+try:
+    # Loop de busca
+    for produto in produtos:
+        print(f"\n🔎 Buscando produtos semelhantes a: {produto}")
 
-    driver.get('https://cosmos.bluesoft.com.br/buscar_produtos_por_codigo_de_barras')
+        driver.get('https://cosmos.bluesoft.com.br/buscar_produtos_por_codigo_de_barras')
 
-    try:
-        # Espera até o campo de busca estar presente
-        campo_busca = WebDriverWait(driver, 60).until(
-            EC.presence_of_element_located((By.ID, 'search-input'))
-        )
-        campo_busca.clear()
-        campo_busca.send_keys(produto)
-        campo_busca.send_keys(Keys.RETURN)
-
-        # Aguarda o carregamento da próxima página
-        WebDriverWait(driver, 30).until(
-            EC.presence_of_element_located((By.TAG_NAME, "body"))
-        )
-
-        # Localiza o elemento com o GTIN/EAN diretamente
         try:
-            elemento_gtin = WebDriverWait(driver, 30).until(
-                EC.presence_of_element_located((By.XPATH, "//strong[contains(text(),'GTIN/EAN:')]"))
+            # Espera até o campo de busca estar presente
+            campo_busca = WebDriverWait(driver, 60).until(
+                EC.presence_of_element_located((By.ID, 'search-input'))
             )
-            codigo_gtin = elemento_gtin.text.replace("GTIN/EAN:", "").strip()
-            print(f"✅ Código(s) encontrado(s): {codigo_gtin}")
-        except:
-            codigo_gtin = "Não encontrado"
-            print("⚠️ Nenhum código encontrado.")
+            campo_busca.clear()
+            campo_busca.send_keys(produto)
+            campo_busca.send_keys(Keys.RETURN)
 
-        dados_resultado.append({
-            "Produto": produto,
-            "Código(s) de Barras": codigo_gtin,
-            "Fonte": 'https://cosmos.bluesoft.com.br/buscar_produtos_por_codigo_de_barras'
-        })
+            # Aguarda o carregamento da próxima página
+            WebDriverWait(driver, 30).until(
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
+            )
 
-    except Exception as e:
-        print(f"❌ Erro ao buscar produto: {e}")
-        # Salva HTML para debug
-        with open(f"erro_html_{produto.replace(' ', '_')}.html", "w", encoding="utf-8") as f:
-            f.write(driver.page_source)
+            # Localiza o elemento com o GTIN/EAN diretamente
+            try:
+                elemento_gtin = WebDriverWait(driver, 30).until(
+                    EC.presence_of_element_located((By.XPATH, "//strong[contains(text(),'GTIN/EAN:')]"))
+                )
+                codigo_gtin = elemento_gtin.text.replace("GTIN/EAN:", "").strip()
+                print(f"✅ Código(s) encontrado(s): {codigo_gtin}")
+            except TimeoutException:
+                codigo_gtin = "Não encontrado"
+                print("⚠️ Nenhum código encontrado.")
 
-    # Atraso para evitar bloqueios
-    time.sleep(2)
+            dados_resultado.append({
+                "Produto": produto,
+                "Código(s) de Barras": codigo_gtin,
+                "Fonte": 'https://cosmos.bluesoft.com.br/buscar_produtos_por_codigo_de_barras'
+            })
 
-# Fechar o navegador
-driver.quit()
+        except TimeoutException as e:
+            print(f"❌ Erro ao buscar produto: {e}")
+            # Salva HTML para debug
+            nome_arquivo = f"erro_html_{re.sub(r'[^a-zA-Z0-9]', '_', produto)}.html"
+            with open(nome_arquivo, "w", encoding="utf-8") as f:
+                f.write(driver.page_source)
+
+        # Atraso para evitar bloqueios
+        time.sleep(2)
+
+finally:
+    # Fechar o navegador
+    driver.quit()
 
 # Exportar resultados
 df_resultados = pd.DataFrame(dados_resultado)
