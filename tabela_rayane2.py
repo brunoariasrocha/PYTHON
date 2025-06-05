@@ -1,32 +1,11 @@
 import pandas as pd
 import numpy as np
 
-file_path = r'C:\Users\BrunoAriasRocha\OneDrive - AgroOpps\Documentos\analise_topdown_pastagem_jun25_correta.xlsx'
+file_path = r'C:\Users\BrunoAriasRocha\OneDrive - AgroOpps\Documentos\analise_topdown__adubos_pastagem_jun25.xlsx'
 
-sheet_names = [
-    '2,4D 670 G L', 
-    'ACETAMIPRIDO + BIFENTRINA 250 G',
-    'ACETAMIPRIDO + CIPERMETRINA 100',
-    'ATRAZINA + MESOTRIONA 500 G L +',
-    'ATRAZINA 500 G L',
-    'Cipermetrina 250 G L',
-    'CIPROCONAZOL + TIAMETOXAM 300 G',
-    'CLORPIRIFOS 480 G L',
-    'DIQUATE 200 G L',
-    'FIPRONIL 800 G Kg',
-    'Glifosato 360 G L',
-    'Glifosato 480 G L',
-    'Glifosato 500 G L',
-    'Glifosato 720 G Kg',
-    'GLUFOSINATO 200 G L',
-    'IMAZAPIQUE + IMAZAPIR 175 G Kg',
-    'IMAZETAPIR 100 G L',
-    'LAMBDA-CIALOTRINA + TIAMETOXAM',
-    'LAMBDA-CIALOTRINA 250 G L',
-    'MESOTRIONA 480 G L',
-    'METOMIL 216 G L',
-    'METSULFUROM 600 G Kg'
-]
+# Lê dinamicamente os nomes das abas do arquivo Excel
+xls = pd.ExcelFile(file_path)
+sheet_names = xls.sheet_names  # lista com todos os nomes das abas
 
 filiais = [
     'AGUA BOA', 'ARAGUAINA', 'BARRA DO GARÇAS', 'CACERES', 'Campo Grande HUB',
@@ -65,41 +44,55 @@ indice_data = letras_para_indices(['J'])[0]
 dfs = []
 
 for sheet in sheet_names:
-    df = pd.read_excel(file_path, sheet_name=sheet, header=9, nrows=42)
-    
-    campanha_col = df.iloc[:, indice_campanha].astype(str)
-    data_col = df.iloc[:, indice_data].astype(str)
-    
-    real_vendido = df.iloc[:, indices_real_vendido]
-    forecast = df.iloc[:, indices_forecast]
-    
-    real_vendido.columns = filiais
-    forecast.columns = filiais
+    try:
+        # Lê a aba pelo nome, com header na linha 10 (índice 9), 42 linhas de dados
+        df = pd.read_excel(xls, sheet_name=sheet, header=9, nrows=42)
 
-    # Formato longo
-    real_vendido_long = real_vendido.melt(var_name='Filial Planejamento', value_name='Real Vendido').reset_index(drop=True)
-    forecast_long = forecast.melt(var_name='Filial Planejamento', value_name='Previsão').reset_index(drop=True)
-    forecast_long['Previsão'] = pd.to_numeric(forecast_long['Previsão'], errors='coerce').fillna(0).round().astype(int)
-    
-    # Use np.tile para repetir cada valor de campanha/data para todas as filiais daquela linha
-    campanha_tiled = np.tile(campanha_col.values, len(filiais))
-    data_tiled = np.tile(data_col.values, len(filiais))
-    
-    df_combined = pd.DataFrame({
-        'Princípio Ativo': sheet,
-        'Campanha': campanha_tiled,
-        'Filial Planejamento': real_vendido_long['Filial Planejamento'],
-        'Real Vendido': real_vendido_long['Real Vendido'],
-        'Previsão': forecast_long['Previsão'],
-        'Data': data_tiled
-    })
+        # Checa se há colunas suficientes para Campanha e Data
+        if df.shape[1] <= max(indice_campanha, indice_data):
+            print(f"Aba '{sheet}' não possui as colunas necessárias (Campanha ou Data). Pulando.")
+            continue
 
-    dfs.append(df_combined)
+        # Checa se há colunas suficientes para Real Vendido e Forecast
+        if df.shape[1] <= max(max(indices_real_vendido), max(indices_forecast)):
+            print(f"Aba '{sheet}' não possui todas as colunas de Real Vendido ou Forecast. Pulando.")
+            continue
+
+        campanha_col = df.iloc[:, indice_campanha].astype(str)
+        data_col = df.iloc[:, indice_data].astype(str)
+
+        real_vendido = df.iloc[:, indices_real_vendido]
+        forecast = df.iloc[:, indices_forecast]
+
+        real_vendido.columns = filiais
+        forecast.columns = filiais
+
+        real_vendido_long = real_vendido.melt(var_name='Filial Planejamento', value_name='Real Vendido').reset_index(drop=True)
+        forecast_long = forecast.melt(var_name='Filial Planejamento', value_name='Previsão').reset_index(drop=True)
+        forecast_long['Previsão'] = pd.to_numeric(forecast_long['Previsão'], errors='coerce').fillna(0).round().astype(int)
+
+        # Repete campanha e data para cada filial da linha
+        campanha_tiled = np.tile(campanha_col.values, len(filiais))
+        data_tiled = np.tile(data_col.values, len(filiais))
+
+        df_combined = pd.DataFrame({
+            'Princípio Ativo': sheet,  # Usa o nome da aba como princípio ativo
+            'Campanha': campanha_tiled,
+            'Filial Planejamento': real_vendido_long['Filial Planejamento'],
+            'Real Vendido': real_vendido_long['Real Vendido'],
+            'Previsão': forecast_long['Previsão'],
+            'Data': data_tiled
+        })
+
+        dfs.append(df_combined)
+    except Exception as e:
+        print(f"Erro ao processar a aba '{sheet}': {e}")
+        continue
 
 df_final = pd.concat(dfs, ignore_index=True)
 
 df_final = df_final[['Princípio Ativo', 'Campanha', 'Filial Planejamento', 'Real Vendido', 'Previsão', 'Data']]
 
-df_final.to_excel(r'C:\Users\BrunoAriasRocha\Downloads\resultado_final_com_campanha.xlsx', index=False)
+df_final.to_excel(r'C:\Users\BrunoAriasRocha\Downloads\resultado_final_com_campanha_adubos_pastagem.xlsx', index=False)
 
-print("Arquivo 'resultado_final_com_campanha.xlsx' salvo com sucesso!")
+print("Arquivo salvo com sucesso!")
